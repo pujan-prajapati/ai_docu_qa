@@ -6,7 +6,7 @@ import chatRouter from "./routes/chat.routes.js";
 import { connectDB } from "./config/db.config.js";
 
 const app = express();
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 5000;
 
 app.use(
   cors({
@@ -15,8 +15,8 @@ app.use(
 );
 app.use(express.json());
 
-app.use("/api/documents", documentRouter);
-app.use("/api/chat", chatRouter);
+app.use("/api", documentRouter);
+app.use("/api", chatRouter);
 
 connectDB()
   .then(() => {

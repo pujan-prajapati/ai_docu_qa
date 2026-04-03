@@ -7,7 +7,7 @@ import {
 
 const router = express.Router();
 
-router.post("/upload", upload.single("file"), uploadDocument);
-router.get("/:sessionId", checkDocument);
+router.post("/document/upload", upload.single("file"), uploadDocument);
+router.get("/document/:sessionId", checkDocument);
 
 export default router;
