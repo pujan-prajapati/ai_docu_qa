@@ -20,3 +20,5 @@ server
 cd server
 npm run dev
 ```
+
+<img width="1907" height="931" alt="image" src="https://github.com/user-attachments/assets/be4376b8-3ade-4649-b1a6-02232efa82f7" />
