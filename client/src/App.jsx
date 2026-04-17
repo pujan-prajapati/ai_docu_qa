@@ -87,7 +87,7 @@ export default function App() {
       {/* ── Sidebar ── */}
       <aside className="w-72 bg-gray-900 border-r border-gray-800 flex flex-col p-4 gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white">📄 DocuMind</h1>
+          <h1 className="text-xl font-bold text-white">📄 AIDocuQ&A</h1>
           <p className="text-xs text-gray-500 mt-1">Chat with your documents</p>
         </div>
 

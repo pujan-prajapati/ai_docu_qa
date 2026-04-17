@@ -1,7 +1,7 @@
 export const prompts = {
   default: (docContent) => `
     You are a helpful document assistant.
-    Answer questions only based on the documetn provided below.
+    Answer questions only based on the document provided below.
     If the answer is not in the document, say:
     "I couldn't find that in the document. Try asking something else!"
     Be concise and clear.

@@ -3,6 +3,9 @@ import fs from "fs";
 import { PDFParse } from "pdf-parse";
 import asyncHandler from "express-async-handler";
 import { Document } from "../models/document.model.js";
+import { Chunk } from "../models/chunk.model.js";
+import { chunker } from "../services/chunker.js";
+import { embedderService } from "../services/embedder.js";
 
 // upload document
 export const uploadDocument = asyncHandler(async (req, res) => {
@@ -16,6 +19,7 @@ export const uploadDocument = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Session ID is required" });
   }
 
+  // 1. parse file content
   let content = "";
   const filePath = req.file.path;
 
@@ -43,11 +47,13 @@ export const uploadDocument = asyncHandler(async (req, res) => {
       .json({ error: "Failed to extract content from the document" });
   }
 
-  //   Delete old document for this sesion if exists
-  //  so user can re-upload without duplicates
-  await Document.findOneAndDelete({ sessionId });
+  fs.unlinkSync(filePath);
 
-  //   save to database
+  // 2. Delete old document + chunks for this session
+  await Document.findOneAndDelete({ sessionId });
+  await Chunk.deleteMany({ sessionId });
+
+  // 3. Save document
   const doc = await Document.create({
     sessionId,
     fileName: req.file.filename,
@@ -57,15 +63,59 @@ export const uploadDocument = asyncHandler(async (req, res) => {
     size: req.file.size,
   });
 
-  //   clean up uploaded file from disk - we have it in DB now
-  fs.unlinkSync(filePath);
+  // 4. split into chunks
+  const chunks = chunker.splitIntoChunks(content);
+  console.log(`Split into ${chunks.length} chunks`);
 
-  res.json({
-    message: "Document uploaded and processed successfully",
-    documentId: doc._id,
-    originalName: doc.originalName,
-    characters: doc.characters,
+  // 5. embed all chunks
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
   });
+
+  res.write(
+    `data: ${JSON.stringify({ status: "chunking", total: chunks.length })}\n\n`,
+  );
+  const chunkDocs = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const embedding = await embedderService.embed(chunk.text);
+
+    chunkDocs.push({
+      sessionId,
+      documentId: doc._id,
+      text: chunk.text,
+      embedding,
+      chunkIndex: i,
+      wordCount: chunk.wordCount,
+    });
+
+    // Send progress to frontend
+    res.write(
+      `data: ${JSON.stringify({
+        status: "embedding",
+        progress: i + 1,
+        total: chunks.length,
+      })}\n\n`,
+    );
+  }
+
+  // 6. Bulk insert all chunks
+  await Chunk.insertMany(chunkDocs);
+
+  res.write(
+    `data: ${JSON.stringify({
+      status: "done",
+      documentId: doc._id,
+      originalName: doc.originalName,
+      totalChunks: chunks.length,
+      characters: content.length,
+    })}\n\n`,
+  );
+
+  res.end();
 });
 
 // get document with session id

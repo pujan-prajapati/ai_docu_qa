@@ -1,9 +1,9 @@
-import express from "express";
 import { Session } from "../models/session.model.js";
 import { Document } from "../models/document.model.js";
 import { prompts } from "../systemPrompts/prompts.js";
 import asyncHandler from "express-async-handler";
 import Groq from "groq-sdk";
+import { retriever } from "../services/retriever.js";
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
@@ -20,7 +20,7 @@ export const chat = asyncHandler(async (req, res) => {
   }
 
   try {
-    //    load document for this session
+    // 1. Check document exists
     const doc = await Document.findOne({ sessionId });
     if (!doc) {
       return res
@@ -28,30 +28,42 @@ export const chat = asyncHandler(async (req, res) => {
         .json({ error: "Document not found. Please upload a file first." });
     }
 
-    // load chat history from mongodb
+    // 2. RAG - find relevant chunks instead of sending full document
+    const relevantChunks = await retriever.findRelevantChunks(
+      message,
+      sessionId,
+      4,
+    );
+
+    // 3. Build context string from top chunks
+    const context = relevantChunks
+      .map((chunk, i) => `[Excerpt ${i + 1}]:\n${chunk.text}`)
+      .join("\n\n");
+
+    // 4. Build system prompt with ONLY relevant context (not full doc)
+    const promptFn = prompts[persona] || prompts.default;
+    const systemPrompt = promptFn(context);
+
+    // 5. Load chat history
     let session = await Session.findOne({ sessionId });
     if (!session) {
       session = await Session.create({ sessionId, persona, messages: [] });
     }
 
     // sliding window - last 20 messages only
-    const history = session.messages.slice(-20).map((m) => ({
+    const history = session.messages.slice(-5).map((m) => ({
       role: m.role,
       content: m.content,
     }));
 
-    // build system prompt with document injected
-    const promptFn = prompts[persona] || prompts["default"];
-    const systemPrompt = promptFn(doc.content);
-
-    // set SEE headers for streaming
+    // 6. stream response
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
 
-    // stream from open router
+    // stream from groq
     const stream = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: "llama-3.1-8b-instant",
       messages: [
         { role: "system", content: systemPrompt },
         ...history,
@@ -70,6 +82,7 @@ export const chat = asyncHandler(async (req, res) => {
       }
     }
 
+    // 7. Persist to mongoDB
     await Session.findOneAndUpdate(
       { sessionId },
       {
@@ -83,6 +96,9 @@ export const chat = asyncHandler(async (req, res) => {
         },
         updatedAt: new Date(),
         persona,
+      },
+      {
+        upsert: true,
       },
     );
 
