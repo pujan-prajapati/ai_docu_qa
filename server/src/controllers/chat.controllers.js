@@ -3,7 +3,8 @@ import { Document } from "../models/document.model.js";
 import { prompts } from "../systemPrompts/prompts.js";
 import asyncHandler from "express-async-handler";
 import Groq from "groq-sdk";
-import { retriever } from "../services/retriever.js";
+// import { retriever } from "../services/retriever.js";
+import retriever from "../services/hybridRetriever.js";
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
