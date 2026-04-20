@@ -2,12 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { useChat } from "./hooks/useChat";
 import {
-  uploadDocument,
   checkDocument,
+  uploadDocumentWithProgress,
   getChatHistory,
   clearHistory,
 } from "./api/chat";
-import ReactMarkdown from "react-markdown";
 
 const PERSONAS = [
   { id: "default", label: "🤖 Assistant", desc: "Helpful & concise" },
@@ -21,6 +20,7 @@ const PERSONAS = [
 ];
 
 export default function App() {
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [sessionId] = useState(
     () =>
       localStorage.getItem("sessionId") ||
@@ -62,11 +62,24 @@ export default function App() {
   const handleUpload = async (file) => {
     if (!file) return;
     setUploading(true);
-    const data = await uploadDocument(file, sessionId);
-    if (!data.error) {
-      setDocument({ originalName: file.name, characters: data.characters });
-    }
-    setUploading(false);
+    setUploadProgress({ status: "starting", progress: 0, total: 0 });
+
+    await uploadDocumentWithProgress(file, sessionId, (event) => {
+      setUploadProgress(event);
+
+      if (event.status === "done") {
+        setDocument({
+          originalName: event.originalName,
+          totalChunks: event.totalChunks,
+          characters: event.characters,
+        });
+        setUploading(false);
+      }
+
+      if (event.error) {
+        setUploading(false);
+      }
+    });
   };
 
   const handleSend = async () => {
@@ -87,7 +100,7 @@ export default function App() {
       {/* ── Sidebar ── */}
       <aside className="w-72 bg-gray-900 border-r border-gray-800 flex flex-col p-4 gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white">📄 AIDocuQ&A</h1>
+          <h1 className="text-xl font-bold text-white">📄 DocuMind</h1>
           <p className="text-xs text-gray-500 mt-1">Chat with your documents</p>
         </div>
 
@@ -112,7 +125,29 @@ export default function App() {
           `}
         >
           {uploading ? (
-            <p className="text-sm text-blue-400">Uploading...</p>
+            <div>
+              <p className="text-sm text-blue-400">Uploading...</p>
+              {uploadProgress && (
+                <div className="mt-2">
+                  <p className="text-xs text-blue-400 mb-1">
+                    {uploadProgress.status === "chunking" &&
+                      "Splitting document..."}
+                    {uploadProgress.status === "embedding" &&
+                      `Embedding chunks... ${uploadProgress.progress}/${uploadProgress.total}`}
+                  </p>
+                  <div className="w-full bg-gray-700 rounded-full h-1.5">
+                    <div
+                      className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                      style={{
+                        width: uploadProgress.total
+                          ? `${(uploadProgress.progress / uploadProgress.total) * 100}%`
+                          : "10%",
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           ) : document ? (
             <div>
               <p className="text-green-400 text-sm font-medium">
@@ -219,37 +254,7 @@ export default function App() {
                     : "bg-gray-800 text-gray-100 rounded-bl-sm"
                 }`}
               >
-                <div className="prose prose-invert prose-sm max-w-none">
-                  <ReactMarkdown
-                    components={{
-                      p: ({ children }) => (
-                        <p className="mb-2 last:mb-0">{children}</p>
-                      ),
-                      ul: ({ children }) => (
-                        <ul className="list-disc pl-4 mb-2">{children}</ul>
-                      ),
-                      ol: ({ children }) => (
-                        <ol className="list-decimal pl-4 mb-2">{children}</ol>
-                      ),
-                      li: ({ children }) => (
-                        <li className="mb-1">{children}</li>
-                      ),
-                      strong: ({ children }) => (
-                        <strong className="font-bold text-white">
-                          {children}
-                        </strong>
-                      ),
-                      code: ({ children }) => (
-                        <code className="bg-gray-700 px-1 rounded text-xs">
-                          {children}
-                        </code>
-                      ),
-                    }}
-                  >
-                    {msg.content}
-                  </ReactMarkdown>
-                </div>
-
+                {msg.content}
                 {/* Blinking cursor while streaming on last assistant message */}
                 {streaming &&
                   i === messages.length - 1 &&
