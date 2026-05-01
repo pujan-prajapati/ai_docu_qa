@@ -1,4 +1,4 @@
-const BASE = "http://localhost:5000/api";
+const BASE = "https://aidocuqa-production.up.railway.app/api";
 
 export const uploadDocument = async (file, sessionId) => {
   const formData = new FormData();
