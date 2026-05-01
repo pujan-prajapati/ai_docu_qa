@@ -11,6 +11,7 @@ const PORT = process.env.PORT || 5000;
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN,
+    credentials: true,
   }),
 );
 app.use(express.json());
@@ -25,5 +26,5 @@ connectDB()
     });
   })
   .catch((error) => {
-    console.log("Conenction Failed : ", error);
+    console.log("Connection Failed : ", error);
   });
